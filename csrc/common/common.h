@@ -7,7 +7,7 @@
 // license agreement from NVIDIA CORPORATION is strictly prohibited.
 
 #pragma once
-#include <cuda.h>
+#include <musa_runtime.h>
 #include <stdint.h>
 
 //------------------------------------------------------------------------
@@ -17,12 +17,12 @@ dim3 getLaunchBlockSize(int maxWidth, int maxHeight, int width, int height);
 dim3 getLaunchGridSize(dim3 blockSize, int width, int height, int depth);
 
 //------------------------------------------------------------------------
-// The rest is CUDA device code specific stuff.
+// The rest is GPU device code specific stuff.
 
-#ifdef __CUDACC__
+#if defined(__CUDACC__) || defined(__MUSACC__)
 
 //------------------------------------------------------------------------
-// Helpers for CUDA vector types.
+// Helpers for vector types.
 
 static __device__ __forceinline__ float2&   operator*=  (float2& a, const float2& b)       { a.x *= b.x; a.y *= b.y; return a; }
 static __device__ __forceinline__ float2&   operator+=  (float2& a, const float2& b)       { a.x += b.x; a.y += b.y; return a; }
@@ -195,7 +195,7 @@ static __device__ __forceinline__ float triidx_to_float(int x)   { if (x <= 0x01
 //------------------------------------------------------------------------
 // Coalesced atomics. These are all done via macros.
 
-#if __CUDA_ARCH__ >= 700 // Warp match instruction __match_any_sync() is only available on compute capability 7.x and higher
+#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 700 // Warp match instruction __match_any_sync() is only available on compute capability 7.x and higher
 
 #define CA_TEMP       _ca_temp
 #define CA_TEMP_PARAM float* CA_TEMP
@@ -260,4 +260,4 @@ static __device__ __forceinline__ float triidx_to_float(int x)   { if (x <= 0x01
 #endif // __CUDA_ARCH__ >= 700
 
 //------------------------------------------------------------------------
-#endif // __CUDACC__
+#endif // defined(__CUDACC__) || defined(__MUSACC__)

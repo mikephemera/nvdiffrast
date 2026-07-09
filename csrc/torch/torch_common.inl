@@ -8,6 +8,7 @@
 
 #pragma once
 #include "../common/framework.h"
+#include <optional>
 
 //------------------------------------------------------------------------
 // Input check helpers.
@@ -17,11 +18,25 @@
 #define __func__ __FUNCTION__
 #endif
 
-#define NVDR_CHECK_DEVICE(...) do { TORCH_CHECK(at::cuda::check_device({__VA_ARGS__}), __func__, "(): Inputs " #__VA_ARGS__ " must reside on the same GPU device") } while(0)
+#define NVDR_CHECK_DEVICE(...) do { nvdr_check_device({__VA_ARGS__}, __func__, "(): Inputs " #__VA_ARGS__ " must reside on the same MUSA device"); } while(0)
 #define NVDR_CHECK_CPU(...) do { nvdr_check_cpu({__VA_ARGS__}, __func__, "(): Inputs " #__VA_ARGS__ " must reside on CPU"); } while(0)
 #define NVDR_CHECK_CONTIGUOUS(...) do { nvdr_check_contiguous({__VA_ARGS__}, __func__, "(): Inputs " #__VA_ARGS__ " must be contiguous tensors"); } while(0)
 #define NVDR_CHECK_F32(...) do { nvdr_check_f32({__VA_ARGS__}, __func__, "(): Inputs " #__VA_ARGS__ " must be float32 tensors"); } while(0)
 #define NVDR_CHECK_I32(...) do { nvdr_check_i32({__VA_ARGS__}, __func__, "(): Inputs " #__VA_ARGS__ " must be int32 tensors"); } while(0)
+inline void nvdr_check_device(at::ArrayRef<at::Tensor> ts, const char* func, const char* err_msg)
+{
+    std::optional<c10::DeviceIndex> device_index;
+    for (const at::Tensor& t : ts)
+    {
+        TORCH_CHECK(t.defined(), func, err_msg);
+        TORCH_CHECK(t.device().type() == c10::DeviceType::PrivateUse1, func, err_msg, "; got ", t.device());
+        c10::DeviceIndex idx = t.device().index();
+        if (!device_index.has_value())
+            device_index = idx;
+        else
+            TORCH_CHECK(idx == device_index.value(), func, err_msg);
+    }
+}
 inline void nvdr_check_cpu(at::ArrayRef<at::Tensor> ts,        const char* func, const char* err_msg) { for (const at::Tensor& t : ts) TORCH_CHECK(t.device().type() == c10::DeviceType::CPU, func, err_msg); }
 inline void nvdr_check_contiguous(at::ArrayRef<at::Tensor> ts, const char* func, const char* err_msg) { for (const at::Tensor& t : ts) TORCH_CHECK(t.is_contiguous(), func, err_msg); }
 inline void nvdr_check_f32(at::ArrayRef<at::Tensor> ts,        const char* func, const char* err_msg) { for (const at::Tensor& t : ts) TORCH_CHECK(t.dtype() == torch::kFloat32, func, err_msg); }

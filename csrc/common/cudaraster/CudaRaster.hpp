@@ -8,6 +8,8 @@
 
 #pragma once
 
+#include <musa_runtime.h>
+
 //------------------------------------------------------------------------
 // This is a slimmed-down and modernized version of the original
 // CudaRaster codebase that accompanied the HPG 2011 paper
@@ -45,7 +47,7 @@ public:
     void                    deferredClear           (unsigned int clearColor);                           // Clears color and depth buffers during next call to drawTriangles().
     void                    setVertexBuffer         (void* vertices, int numVertices);                   // GPU pointer managed by caller. Vertex positions in clip space as float4 (x, y, z, w).
     void                    setIndexBuffer          (void* indices, int numTriangles);                   // GPU pointer managed by caller. Triangle index+color quadruplets as uint4 (idx0, idx1, idx2, color).
-    bool                    drawTriangles           (const int* ranges, bool peel, cudaStream_t stream); // Ranges (offsets and counts) as #triangles entries, not as bytes. If NULL, draw all triangles. Returns false in case of internal overflow.
+    bool                    drawTriangles           (const int* ranges, bool peel, musaStream_t stream); // Ranges (offsets and counts) as #triangles entries, not as bytes. If NULL, draw all triangles. Returns false in case of internal overflow.
     void*                   getColorBuffer          (void);                                              // GPU pointer managed by CudaRaster.
     void*                   getDepthBuffer          (void);                                              // GPU pointer managed by CudaRaster.
     void                    swapDepthAndPeel        (void);                                              // Swap depth and peeling buffers.
@@ -60,4 +62,3 @@ private:
 
 //------------------------------------------------------------------------
 } // namespace CR
-

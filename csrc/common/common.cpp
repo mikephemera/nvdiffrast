@@ -6,7 +6,7 @@
 // distribution of this software and related documentation without an express
 // license agreement from NVIDIA CORPORATION is strictly prohibited.
 
-#include <cuda_runtime.h>
+#include <musa_runtime.h>
 
 //------------------------------------------------------------------------
 // Block and grid size calculators for kernel launches.

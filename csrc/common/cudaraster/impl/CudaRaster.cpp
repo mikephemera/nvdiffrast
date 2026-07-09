@@ -56,7 +56,7 @@ void CudaRaster::setIndexBuffer(void* indices, int numTriangles)
     m_impl->setIndexBuffer(indices, numTriangles);
 }
 
-bool CudaRaster::drawTriangles(const int* ranges, bool peel, cudaStream_t stream)
+bool CudaRaster::drawTriangles(const int* ranges, bool peel, musaStream_t stream)
 {
     return m_impl->drawTriangles((const Vec2i*)ranges, peel, stream);
 }

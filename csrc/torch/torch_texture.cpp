@@ -10,65 +10,71 @@
 #include "torch_types.h"
 #include "../common/common.h"
 #include "../common/texture.h"
-#include <cuda_runtime.h>
+#include <musa_runtime.h>
 
 //------------------------------------------------------------------------
 // Kernel prototypes.
 
-void MipBuildKernel1                            (const TextureKernelParams p);
-void MipBuildKernel2                            (const TextureKernelParams p);
-void MipBuildKernel4                            (const TextureKernelParams p);
-void TextureFwdKernelNearest1                   (const TextureKernelParams p);
-void TextureFwdKernelNearest2                   (const TextureKernelParams p);
-void TextureFwdKernelNearest4                   (const TextureKernelParams p);
-void TextureFwdKernelLinear1                    (const TextureKernelParams p);
-void TextureFwdKernelLinear2                    (const TextureKernelParams p);
-void TextureFwdKernelLinear4                    (const TextureKernelParams p);
-void TextureFwdKernelLinearMipmapNearest1       (const TextureKernelParams p);
-void TextureFwdKernelLinearMipmapNearest2       (const TextureKernelParams p);
-void TextureFwdKernelLinearMipmapNearest4       (const TextureKernelParams p);
-void TextureFwdKernelLinearMipmapLinear1        (const TextureKernelParams p);
-void TextureFwdKernelLinearMipmapLinear2        (const TextureKernelParams p);
-void TextureFwdKernelLinearMipmapLinear4        (const TextureKernelParams p);
-void TextureFwdKernelCubeNearest1               (const TextureKernelParams p);
-void TextureFwdKernelCubeNearest2               (const TextureKernelParams p);
-void TextureFwdKernelCubeNearest4               (const TextureKernelParams p);
-void TextureFwdKernelCubeLinear1                (const TextureKernelParams p);
-void TextureFwdKernelCubeLinear2                (const TextureKernelParams p);
-void TextureFwdKernelCubeLinear4                (const TextureKernelParams p);
-void TextureFwdKernelCubeLinearMipmapNearest1   (const TextureKernelParams p);
-void TextureFwdKernelCubeLinearMipmapNearest2   (const TextureKernelParams p);
-void TextureFwdKernelCubeLinearMipmapNearest4   (const TextureKernelParams p);
-void TextureFwdKernelCubeLinearMipmapLinear1    (const TextureKernelParams p);
-void TextureFwdKernelCubeLinearMipmapLinear2    (const TextureKernelParams p);
-void TextureFwdKernelCubeLinearMipmapLinear4    (const TextureKernelParams p);
-void TextureFwdKernelLinearMipmapNearestBO1     (const TextureKernelParams p);
-void TextureFwdKernelLinearMipmapNearestBO2     (const TextureKernelParams p);
-void TextureFwdKernelLinearMipmapNearestBO4     (const TextureKernelParams p);
-void TextureFwdKernelLinearMipmapLinearBO1      (const TextureKernelParams p);
-void TextureFwdKernelLinearMipmapLinearBO2      (const TextureKernelParams p);
-void TextureFwdKernelLinearMipmapLinearBO4      (const TextureKernelParams p);
-void TextureFwdKernelCubeLinearMipmapNearestBO1 (const TextureKernelParams p);
-void TextureFwdKernelCubeLinearMipmapNearestBO2 (const TextureKernelParams p);
-void TextureFwdKernelCubeLinearMipmapNearestBO4 (const TextureKernelParams p);
-void TextureFwdKernelCubeLinearMipmapLinearBO1  (const TextureKernelParams p);
-void TextureFwdKernelCubeLinearMipmapLinearBO2  (const TextureKernelParams p);
-void TextureFwdKernelCubeLinearMipmapLinearBO4  (const TextureKernelParams p);
-void MipGradKernel1                             (const TextureKernelParams p);
-void MipGradKernel2                             (const TextureKernelParams p);
-void MipGradKernel4                             (const TextureKernelParams p);
-void TextureGradKernelNearest                   (const TextureKernelParams p);
-void TextureGradKernelLinear                    (const TextureKernelParams p);
-void TextureGradKernelLinearMipmapNearest       (const TextureKernelParams p);
-void TextureGradKernelLinearMipmapLinear        (const TextureKernelParams p);
-void TextureGradKernelCubeNearest               (const TextureKernelParams p);
-void TextureGradKernelCubeLinear                (const TextureKernelParams p);
-void TextureGradKernelCubeLinearMipmapNearest   (const TextureKernelParams p);
-void TextureGradKernelCubeLinearMipmapLinear    (const TextureKernelParams p);
-void TextureGradKernelLinearMipmapNearestBO     (const TextureKernelParams p);
-void TextureGradKernelLinearMipmapLinearBO      (const TextureKernelParams p);
-void TextureGradKernelCubeLinearMipmapNearestBO (const TextureKernelParams p);
-void TextureGradKernelCubeLinearMipmapLinearBO  (const TextureKernelParams p);
+#define NVDR_DECLARE_MUSA_KERNEL(name) \
+    void __device_stub__##name(const TextureKernelParams p); \
+    static constexpr auto name = __device_stub__##name
+
+NVDR_DECLARE_MUSA_KERNEL(MipBuildKernel1);
+NVDR_DECLARE_MUSA_KERNEL(MipBuildKernel2);
+NVDR_DECLARE_MUSA_KERNEL(MipBuildKernel4);
+NVDR_DECLARE_MUSA_KERNEL(TextureFwdKernelNearest1);
+NVDR_DECLARE_MUSA_KERNEL(TextureFwdKernelNearest2);
+NVDR_DECLARE_MUSA_KERNEL(TextureFwdKernelNearest4);
+NVDR_DECLARE_MUSA_KERNEL(TextureFwdKernelLinear1);
+NVDR_DECLARE_MUSA_KERNEL(TextureFwdKernelLinear2);
+NVDR_DECLARE_MUSA_KERNEL(TextureFwdKernelLinear4);
+NVDR_DECLARE_MUSA_KERNEL(TextureFwdKernelLinearMipmapNearest1);
+NVDR_DECLARE_MUSA_KERNEL(TextureFwdKernelLinearMipmapNearest2);
+NVDR_DECLARE_MUSA_KERNEL(TextureFwdKernelLinearMipmapNearest4);
+NVDR_DECLARE_MUSA_KERNEL(TextureFwdKernelLinearMipmapLinear1);
+NVDR_DECLARE_MUSA_KERNEL(TextureFwdKernelLinearMipmapLinear2);
+NVDR_DECLARE_MUSA_KERNEL(TextureFwdKernelLinearMipmapLinear4);
+NVDR_DECLARE_MUSA_KERNEL(TextureFwdKernelCubeNearest1);
+NVDR_DECLARE_MUSA_KERNEL(TextureFwdKernelCubeNearest2);
+NVDR_DECLARE_MUSA_KERNEL(TextureFwdKernelCubeNearest4);
+NVDR_DECLARE_MUSA_KERNEL(TextureFwdKernelCubeLinear1);
+NVDR_DECLARE_MUSA_KERNEL(TextureFwdKernelCubeLinear2);
+NVDR_DECLARE_MUSA_KERNEL(TextureFwdKernelCubeLinear4);
+NVDR_DECLARE_MUSA_KERNEL(TextureFwdKernelCubeLinearMipmapNearest1);
+NVDR_DECLARE_MUSA_KERNEL(TextureFwdKernelCubeLinearMipmapNearest2);
+NVDR_DECLARE_MUSA_KERNEL(TextureFwdKernelCubeLinearMipmapNearest4);
+NVDR_DECLARE_MUSA_KERNEL(TextureFwdKernelCubeLinearMipmapLinear1);
+NVDR_DECLARE_MUSA_KERNEL(TextureFwdKernelCubeLinearMipmapLinear2);
+NVDR_DECLARE_MUSA_KERNEL(TextureFwdKernelCubeLinearMipmapLinear4);
+NVDR_DECLARE_MUSA_KERNEL(TextureFwdKernelLinearMipmapNearestBO1);
+NVDR_DECLARE_MUSA_KERNEL(TextureFwdKernelLinearMipmapNearestBO2);
+NVDR_DECLARE_MUSA_KERNEL(TextureFwdKernelLinearMipmapNearestBO4);
+NVDR_DECLARE_MUSA_KERNEL(TextureFwdKernelLinearMipmapLinearBO1);
+NVDR_DECLARE_MUSA_KERNEL(TextureFwdKernelLinearMipmapLinearBO2);
+NVDR_DECLARE_MUSA_KERNEL(TextureFwdKernelLinearMipmapLinearBO4);
+NVDR_DECLARE_MUSA_KERNEL(TextureFwdKernelCubeLinearMipmapNearestBO1);
+NVDR_DECLARE_MUSA_KERNEL(TextureFwdKernelCubeLinearMipmapNearestBO2);
+NVDR_DECLARE_MUSA_KERNEL(TextureFwdKernelCubeLinearMipmapNearestBO4);
+NVDR_DECLARE_MUSA_KERNEL(TextureFwdKernelCubeLinearMipmapLinearBO1);
+NVDR_DECLARE_MUSA_KERNEL(TextureFwdKernelCubeLinearMipmapLinearBO2);
+NVDR_DECLARE_MUSA_KERNEL(TextureFwdKernelCubeLinearMipmapLinearBO4);
+NVDR_DECLARE_MUSA_KERNEL(MipGradKernel1);
+NVDR_DECLARE_MUSA_KERNEL(MipGradKernel2);
+NVDR_DECLARE_MUSA_KERNEL(MipGradKernel4);
+NVDR_DECLARE_MUSA_KERNEL(TextureGradKernelNearest);
+NVDR_DECLARE_MUSA_KERNEL(TextureGradKernelLinear);
+NVDR_DECLARE_MUSA_KERNEL(TextureGradKernelLinearMipmapNearest);
+NVDR_DECLARE_MUSA_KERNEL(TextureGradKernelLinearMipmapLinear);
+NVDR_DECLARE_MUSA_KERNEL(TextureGradKernelCubeNearest);
+NVDR_DECLARE_MUSA_KERNEL(TextureGradKernelCubeLinear);
+NVDR_DECLARE_MUSA_KERNEL(TextureGradKernelCubeLinearMipmapNearest);
+NVDR_DECLARE_MUSA_KERNEL(TextureGradKernelCubeLinearMipmapLinear);
+NVDR_DECLARE_MUSA_KERNEL(TextureGradKernelLinearMipmapNearestBO);
+NVDR_DECLARE_MUSA_KERNEL(TextureGradKernelLinearMipmapLinearBO);
+NVDR_DECLARE_MUSA_KERNEL(TextureGradKernelCubeLinearMipmapNearestBO);
+NVDR_DECLARE_MUSA_KERNEL(TextureGradKernelCubeLinearMipmapLinearBO);
+
+#undef NVDR_DECLARE_MUSA_KERNEL
 
 //------------------------------------------------------------------------
 // Modeselektor.
@@ -97,8 +103,8 @@ static void set_modes(TextureKernelParams& p, int filter_mode, int boundary_mode
 
 TextureMipWrapper texture_construct_mip(torch::Tensor tex, int max_mip_level, bool cube_mode)
 {
-    const at::cuda::OptionalCUDAGuard device_guard(device_of(tex));
-    cudaStream_t stream = at::cuda::getCurrentCUDAStream();
+    const c10::musa::OptionalMUSAGuard device_guard(device_of(tex));
+    musaStream_t stream = c10::musa::getCurrentMUSAStream();
     TextureKernelParams p = {}; // Initialize all fields to zero.
     p.mipLevelLimit = max_mip_level;
     p.boundaryMode = cube_mode ? TEX_BOUNDARY_MODE_CUBE : TEX_BOUNDARY_MODE_WRAP;
@@ -132,7 +138,7 @@ TextureMipWrapper texture_construct_mip(torch::Tensor tex, int max_mip_level, bo
     int mipTotal = calculateMipInfo(p, mipOffsets);
 
     // Allocate and set mip tensor.
-    torch::TensorOptions opts = torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA);
+    torch::TensorOptions opts = torch::TensorOptions().dtype(torch::kFloat32).device(c10::Device(c10::DeviceType::PrivateUse1, tex.get_device()));
     torch::Tensor mip = torch::empty({mipTotal}, opts);
     float* pmip = mip.data_ptr<float>();
     for (int i=1; i <= p.mipLevelMax; i++)
@@ -156,7 +162,7 @@ TextureMipWrapper texture_construct_mip(torch::Tensor tex, int max_mip_level, bo
         p.mipLevelOut = i;
 
         void* build_func_tbl[3] = { (void*)MipBuildKernel1, (void*)MipBuildKernel2, (void*)MipBuildKernel4 };
-        NVDR_CHECK_CUDA_ERROR(cudaLaunchKernel(build_func_tbl[channel_div_idx], gridSize, blockSize, args, 0, stream));
+        NVDR_CHECK_MUSA_ERROR(musaLaunchKernel(build_func_tbl[channel_div_idx], gridSize, blockSize, args, 0, stream));
     }
 
     // Return the mip tensor in a wrapper.
@@ -173,8 +179,8 @@ TextureMipWrapper texture_construct_mip(torch::Tensor tex, int max_mip_level, bo
 
 torch::Tensor texture_fwd_mip(torch::Tensor tex, torch::Tensor uv, torch::Tensor uv_da, torch::Tensor mip_level_bias, TextureMipWrapper mip_wrapper, std::vector<torch::Tensor> mip_stack, int filter_mode, int boundary_mode)
 {
-    const at::cuda::OptionalCUDAGuard device_guard(device_of(tex));
-    cudaStream_t stream = at::cuda::getCurrentCUDAStream();
+    const c10::musa::OptionalMUSAGuard device_guard(device_of(tex));
+    musaStream_t stream = c10::musa::getCurrentMUSAStream();
     TextureKernelParams p = {}; // Initialize all fields to zero.
     bool has_mip_stack = (mip_stack.size() > 0);
     torch::Tensor& mip_w = mip_wrapper.mip; // Unwrap.
@@ -199,7 +205,7 @@ torch::Tensor texture_fwd_mip(torch::Tensor tex, torch::Tensor uv, torch::Tensor
     {
         if (has_mip_stack)
         {
-            TORCH_CHECK(at::cuda::check_device(mip_stack), __func__, "(): Mip stack inputs must reside on the correct GPU device");
+            nvdr_check_device(mip_stack, __func__, "(): Mip stack inputs must reside on the correct MUSA device");
             nvdr_check_contiguous(mip_stack, __func__, "(): Mip stack inputs must be contiguous tensors");
             nvdr_check_f32(mip_stack, __func__, "(): Mip stack inputs must be float32 tensors");
         }
@@ -268,7 +274,7 @@ torch::Tensor texture_fwd_mip(torch::Tensor tex, torch::Tensor uv, torch::Tensor
     p.mipLevelBias = (p.enableMip && has_mip_level_bias) ? mip_level_bias.data_ptr<float>() : NULL;
 
     // Allocate output tensor.
-    torch::TensorOptions opts = torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA);
+    torch::TensorOptions opts = torch::TensorOptions().dtype(torch::kFloat32).device(c10::Device(c10::DeviceType::PrivateUse1, tex.get_device()));
     torch::Tensor out = torch::empty({p.n, p.imgHeight, p.imgWidth, p.channels}, opts);
     p.out = out.data_ptr<float>();
 
@@ -401,7 +407,7 @@ torch::Tensor texture_fwd_mip(torch::Tensor tex, torch::Tensor uv, torch::Tensor
     func_idx = func_idx * 3 + channel_div_idx; // Choose vector size.
 
     // Launch kernel.
-    NVDR_CHECK_CUDA_ERROR(cudaLaunchKernel(func_tbl[func_idx], gridSize, blockSize, args, 0, stream));
+    NVDR_CHECK_MUSA_ERROR(musaLaunchKernel(func_tbl[func_idx], gridSize, blockSize, args, 0, stream));
 
     // Return output tensor.
     return out;
@@ -420,8 +426,8 @@ torch::Tensor texture_fwd(torch::Tensor tex, torch::Tensor uv, int filter_mode, 
 
 std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, std::vector<torch::Tensor> > texture_grad_linear_mipmap_linear(torch::Tensor tex, torch::Tensor uv, torch::Tensor dy, torch::Tensor uv_da, torch::Tensor mip_level_bias, TextureMipWrapper mip_wrapper, std::vector<torch::Tensor> mip_stack, int filter_mode, int boundary_mode)
 {
-    const at::cuda::OptionalCUDAGuard device_guard(device_of(tex));
-    cudaStream_t stream = at::cuda::getCurrentCUDAStream();
+    const c10::musa::OptionalMUSAGuard device_guard(device_of(tex));
+    musaStream_t stream = c10::musa::getCurrentMUSAStream();
     TextureKernelParams p = {}; // Initialize all fields to zero.
     bool has_mip_stack = (mip_stack.size() > 0);
     torch::Tensor& mip_w = mip_wrapper.mip; // Unwrap.
@@ -446,7 +452,7 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, std::vect
     {
         if (has_mip_stack)
         {
-            TORCH_CHECK(at::cuda::check_device(mip_stack), __func__, "(): Mip stack inputs must reside on the correct GPU device");
+            nvdr_check_device(mip_stack, __func__, "(): Mip stack inputs must reside on the correct MUSA device");
             nvdr_check_contiguous(mip_stack, __func__, "(): Mip stack inputs must be contiguous tensors");
             nvdr_check_f32(mip_stack, __func__, "(): Mip stack inputs must be float32 tensors");
         }
@@ -673,7 +679,7 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, std::vect
         func_idx += TEX_MODE_COUNT * 2; // Bias-only variant.
 
     // Launch main gradient kernel.
-    NVDR_CHECK_CUDA_ERROR(cudaLaunchKernel(func_tbl[func_idx], gridSize, blockSize, args, 0, stream));
+    NVDR_CHECK_MUSA_ERROR(musaLaunchKernel(func_tbl[func_idx], gridSize, blockSize, args, 0, stream));
 
     // Launch kernel to pull gradients from mip levels. Don't do this if mip stack was supplied - individual level gradients are already there.
     if (p.enableMip && !has_mip_stack)
@@ -683,7 +689,7 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, std::vect
         int sharedBytes = blockSize.x * blockSize.y * p.channels * sizeof(float);
 
         void* mip_grad_func_tbl[3] = { (void*)MipGradKernel1, (void*)MipGradKernel2, (void*)MipGradKernel4 };
-        NVDR_CHECK_CUDA_ERROR(cudaLaunchKernel(mip_grad_func_tbl[channel_div_idx], gridSize, blockSize, args, sharedBytes, stream));
+        NVDR_CHECK_MUSA_ERROR(musaLaunchKernel(mip_grad_func_tbl[channel_div_idx], gridSize, blockSize, args, sharedBytes, stream));
     }
 
     // Return output tensors.

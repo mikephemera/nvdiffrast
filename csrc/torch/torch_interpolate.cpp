@@ -13,10 +13,16 @@
 //------------------------------------------------------------------------
 // Kernel prototypes.
 
-void InterpolateFwdKernel   (const InterpolateKernelParams p);
-void InterpolateFwdKernelDa (const InterpolateKernelParams p);
-void InterpolateGradKernel  (const InterpolateKernelParams p);
-void InterpolateGradKernelDa(const InterpolateKernelParams p);
+#define NVDR_DECLARE_MUSA_KERNEL(name) \
+    void __device_stub__##name(const InterpolateKernelParams p); \
+    static constexpr auto name = __device_stub__##name
+
+NVDR_DECLARE_MUSA_KERNEL(InterpolateFwdKernel);
+NVDR_DECLARE_MUSA_KERNEL(InterpolateFwdKernelDa);
+NVDR_DECLARE_MUSA_KERNEL(InterpolateGradKernel);
+NVDR_DECLARE_MUSA_KERNEL(InterpolateGradKernelDa);
+
+#undef NVDR_DECLARE_MUSA_KERNEL
 
 //------------------------------------------------------------------------
 // Helper
@@ -41,8 +47,8 @@ static void set_diff_attrs(InterpolateKernelParams& p, bool diff_attrs_all, std:
 
 std::tuple<torch::Tensor, torch::Tensor> interpolate_fwd_da(torch::Tensor attr, torch::Tensor rast, torch::Tensor tri, torch::Tensor rast_db, bool diff_attrs_all, std::vector<int>& diff_attrs_vec)
 {
-    const at::cuda::OptionalCUDAGuard device_guard(device_of(attr));
-    cudaStream_t stream = at::cuda::getCurrentCUDAStream();
+    const c10::musa::OptionalMUSAGuard device_guard(device_of(attr));
+    musaStream_t stream = c10::musa::getCurrentMUSAStream();
     InterpolateKernelParams p = {}; // Initialize all fields to zero.
     bool enable_da = (rast_db.defined()) && (diff_attrs_all || !diff_attrs_vec.empty());
     p.instance_mode = (attr.sizes().size() > 2) ? 1 : 0;
@@ -98,7 +104,7 @@ std::tuple<torch::Tensor, torch::Tensor> interpolate_fwd_da(torch::Tensor attr, 
     p.attrBC = (p.instance_mode && attr.size(0) == 1) ? 1 : 0;
 
     // Allocate output tensors.
-    torch::TensorOptions opts = torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA);
+    torch::TensorOptions opts = torch::TensorOptions().dtype(torch::kFloat32).device(c10::Device(c10::DeviceType::PrivateUse1, attr.get_device()));
     torch::Tensor out = torch::empty({p.depth, p.height, p.width, p.numAttr}, opts);
     torch::Tensor out_da = torch::empty({p.depth, p.height, p.width, p.numDiffAttr * 2}, opts);
 
@@ -117,7 +123,7 @@ std::tuple<torch::Tensor, torch::Tensor> interpolate_fwd_da(torch::Tensor attr, 
     // Launch CUDA kernel.
     void* args[] = {&p};
     void* func = enable_da ? (void*)InterpolateFwdKernelDa : (void*)InterpolateFwdKernel;
-    NVDR_CHECK_CUDA_ERROR(cudaLaunchKernel(func, gridSize, blockSize, args, 0, stream));
+    NVDR_CHECK_MUSA_ERROR(musaLaunchKernel(func, gridSize, blockSize, args, 0, stream));
 
     // Return results.
     return std::tuple<torch::Tensor, torch::Tensor>(out, out_da);
@@ -136,8 +142,8 @@ std::tuple<torch::Tensor, torch::Tensor> interpolate_fwd(torch::Tensor attr, tor
 
 std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> interpolate_grad_da(torch::Tensor attr, torch::Tensor rast, torch::Tensor tri, torch::Tensor dy, torch::Tensor rast_db, torch::Tensor dda, bool diff_attrs_all, std::vector<int>& diff_attrs_vec)
 {
-    const at::cuda::OptionalCUDAGuard device_guard(device_of(attr));
-    cudaStream_t stream = at::cuda::getCurrentCUDAStream();
+    const c10::musa::OptionalMUSAGuard device_guard(device_of(attr));
+    musaStream_t stream = c10::musa::getCurrentMUSAStream();
     InterpolateKernelParams p = {}; // Initialize all fields to zero.
     bool enable_da = (rast_db.defined()) && (diff_attrs_all || !diff_attrs_vec.empty());
     p.instance_mode = (attr.sizes().size() > 2) ? 1 : 0;
@@ -207,7 +213,7 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> interpolate_grad_da(torc
     p.attrBC = (p.instance_mode && attr_depth < p.depth) ? 1 : 0;
 
     // Allocate output tensors.
-    torch::TensorOptions opts = torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA);
+    torch::TensorOptions opts = torch::TensorOptions().dtype(torch::kFloat32).device(c10::Device(c10::DeviceType::PrivateUse1, attr.get_device()));
     torch::Tensor gradAttr = torch::zeros_like(attr);
     torch::Tensor gradRaster = torch::empty_like(rast);
     torch::Tensor gradRasterDB;
@@ -232,7 +238,7 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> interpolate_grad_da(torc
     // Launch CUDA kernel.
     void* args[] = {&p};
     void* func = enable_da ? (void*)InterpolateGradKernelDa : (void*)InterpolateGradKernel;
-    NVDR_CHECK_CUDA_ERROR(cudaLaunchKernel(func, gridSize, blockSize, args, 0, stream));
+    NVDR_CHECK_MUSA_ERROR(musaLaunchKernel(func, gridSize, blockSize, args, 0, stream));
 
     // Return results.
     return std::tuple<torch::Tensor, torch::Tensor, torch::Tensor>(gradAttr, gradRaster, gradRasterDB);

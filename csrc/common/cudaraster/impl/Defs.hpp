@@ -7,7 +7,7 @@
 // license agreement from NVIDIA CORPORATION is strictly prohibited.
 
 #pragma once
-#include <cuda_runtime.h>
+#include <musa_runtime.h>
 #include <cstdint>
 
 namespace CR
@@ -18,7 +18,7 @@ namespace CR
 #   define NULL 0
 #endif
 
-#ifdef __CUDACC__
+#if defined(__CUDACC__) || defined(__MUSACC__)
 #   define CR_CUDA 1
 #else
 #   define CR_CUDA 0

@@ -14,69 +14,76 @@ namespace CR
 
 template<class T> __device__ __inline__ void swap(T& a, T& b)               { T t = a; a = b; b = t; }
 
-__device__ __inline__ U32   getLo                   (U64 a)                 { return __double2loint(__longlong_as_double(a)); }
-__device__ __inline__ S32   getLo                   (S64 a)                 { return __double2loint(__longlong_as_double(a)); }
-__device__ __inline__ U32   getHi                   (U64 a)                 { return __double2hiint(__longlong_as_double(a)); }
-__device__ __inline__ S32   getHi                   (S64 a)                 { return __double2hiint(__longlong_as_double(a)); }
-__device__ __inline__ U64   combineLoHi             (U32 lo, U32 hi)        { return __double_as_longlong(__hiloint2double(hi, lo)); }
-__device__ __inline__ S64   combineLoHi             (S32 lo, S32 hi)        { return __double_as_longlong(__hiloint2double(hi, lo)); }
-__device__ __inline__ U32   getLaneMaskLt           (void)                  { U32 r; asm("mov.u32 %0, %lanemask_lt;" : "=r"(r)); return r; }
-__device__ __inline__ U32   getLaneMaskLe           (void)                  { U32 r; asm("mov.u32 %0, %lanemask_le;" : "=r"(r)); return r; }
-__device__ __inline__ U32   getLaneMaskGt           (void)                  { U32 r; asm("mov.u32 %0, %lanemask_gt;" : "=r"(r)); return r; }
-__device__ __inline__ U32   getLaneMaskGe           (void)                  { U32 r; asm("mov.u32 %0, %lanemask_ge;" : "=r"(r)); return r; }
-__device__ __inline__ int   findLeadingOne          (U32 v)                 { U32 r; asm("bfind.u32 %0, %1;" : "=r"(r) : "r"(v)); return r; }
+__device__ __inline__ U32   getLo                   (U64 a)                 { return (U32)a; }
+__device__ __inline__ S32   getLo                   (S64 a)                 { return (S32)(U32)a; }
+__device__ __inline__ U32   getHi                   (U64 a)                 { return (U32)(a >> 32); }
+__device__ __inline__ S32   getHi                   (S64 a)                 { return (S32)(a >> 32); }
+__device__ __inline__ U64   combineLoHi             (U32 lo, U32 hi)        { return ((U64)hi << 32) | (U64)lo; }
+__device__ __inline__ S64   combineLoHi             (S32 lo, S32 hi)        { return (S64)(((U64)(U32)hi << 32) | (U64)(U32)lo); }
+__device__ __inline__ U32   getLaneIdx              (void)                  { return (threadIdx.x + blockDim.x * (threadIdx.y + blockDim.y * threadIdx.z)) & 31u; }
+__device__ __inline__ U32   getLaneMaskLt           (void)                  { U32 lane = getLaneIdx(); return (lane == 0u) ? 0u : ((1u << lane) - 1u); }
+__device__ __inline__ U32   getLaneMaskLe           (void)                  { U32 lane = getLaneIdx(); return (lane == 31u) ? CR_U32_MAX : ((1u << (lane + 1u)) - 1u); }
+__device__ __inline__ U32   getLaneMaskGt           (void)                  { return ~getLaneMaskLe(); }
+__device__ __inline__ U32   getLaneMaskGe           (void)                  { return ~getLaneMaskLt(); }
+__device__ __inline__ int   findLeadingOne          (U32 v)                 { return (v == 0u) ? -1 : 31 - __clz(v); }
 __device__ __inline__ bool  singleLane              (void)                  { return ((::__ballot_sync(~0u, true) & getLaneMaskLt()) == 0); }
 
 __device__ __inline__ void  add_add_carry           (U32& rlo, U32 alo, U32 blo, U32& rhi, U32 ahi, U32 bhi) { U64 r = combineLoHi(alo, ahi) + combineLoHi(blo, bhi); rlo = getLo(r); rhi = getHi(r); }
-__device__ __inline__ S32   f32_to_s32_sat          (F32 a)                 { S32 v; asm("cvt.rni.sat.s32.f32 %0, %1;" : "=r"(v) : "f"(a)); return v; }
-__device__ __inline__ U32   f32_to_u32_sat          (F32 a)                 { U32 v; asm("cvt.rni.sat.u32.f32 %0, %1;" : "=r"(v) : "f"(a)); return v; }
-__device__ __inline__ U32   f32_to_u32_sat_rmi      (F32 a)                 { U32 v; asm("cvt.rmi.sat.u32.f32 %0, %1;" : "=r"(v) : "f"(a)); return v; }
-__device__ __inline__ U32   f32_to_u8_sat           (F32 a)                 { U32 v; asm("cvt.rni.sat.u8.f32 %0, %1;" : "=r"(v) : "f"(a)); return v; }
-__device__ __inline__ S64   f32_to_s64              (F32 a)                 { S64 v; asm("cvt.rni.s64.f32 %0, %1;" : "=l"(v) : "f"(a)); return v; }
-__device__ __inline__ S32   add_s16lo_s16lo			(S32 a, S32 b)			{ S32 v; asm("vadd.s32.s32.s32 %0, %1.h0, %2.h0;" : "=r"(v) : "r"(a), "r"(b)); return v; }
-__device__ __inline__ S32   add_s16hi_s16lo			(S32 a, S32 b)			{ S32 v; asm("vadd.s32.s32.s32 %0, %1.h1, %2.h0;" : "=r"(v) : "r"(a), "r"(b)); return v; }
-__device__ __inline__ S32   add_s16lo_s16hi			(S32 a, S32 b)			{ S32 v; asm("vadd.s32.s32.s32 %0, %1.h0, %2.h1;" : "=r"(v) : "r"(a), "r"(b)); return v; }
-__device__ __inline__ S32   add_s16hi_s16hi			(S32 a, S32 b)			{ S32 v; asm("vadd.s32.s32.s32 %0, %1.h1, %2.h1;" : "=r"(v) : "r"(a), "r"(b)); return v; }
-__device__ __inline__ S32   sub_s16lo_s16lo			(S32 a, S32 b)			{ S32 v; asm("vsub.s32.s32.s32 %0, %1.h0, %2.h0;" : "=r"(v) : "r"(a), "r"(b)); return v; }
-__device__ __inline__ S32   sub_s16hi_s16lo			(S32 a, S32 b)			{ S32 v; asm("vsub.s32.s32.s32 %0, %1.h1, %2.h0;" : "=r"(v) : "r"(a), "r"(b)); return v; }
-__device__ __inline__ S32   sub_s16lo_s16hi			(S32 a, S32 b)			{ S32 v; asm("vsub.s32.s32.s32 %0, %1.h0, %2.h1;" : "=r"(v) : "r"(a), "r"(b)); return v; }
-__device__ __inline__ S32   sub_s16hi_s16hi			(S32 a, S32 b)			{ S32 v; asm("vsub.s32.s32.s32 %0, %1.h1, %2.h1;" : "=r"(v) : "r"(a), "r"(b)); return v; }
-__device__ __inline__ S32   sub_u16lo_u16lo			(U32 a, U32 b)			{ S32 v; asm("vsub.s32.u32.u32 %0, %1.h0, %2.h0;" : "=r"(v) : "r"(a), "r"(b)); return v; }
-__device__ __inline__ S32   sub_u16hi_u16lo			(U32 a, U32 b)			{ S32 v; asm("vsub.s32.u32.u32 %0, %1.h1, %2.h0;" : "=r"(v) : "r"(a), "r"(b)); return v; }
-__device__ __inline__ S32   sub_u16lo_u16hi			(U32 a, U32 b)			{ S32 v; asm("vsub.s32.u32.u32 %0, %1.h0, %2.h1;" : "=r"(v) : "r"(a), "r"(b)); return v; }
-__device__ __inline__ S32   sub_u16hi_u16hi			(U32 a, U32 b)			{ S32 v; asm("vsub.s32.u32.u32 %0, %1.h1, %2.h1;" : "=r"(v) : "r"(a), "r"(b)); return v; }
-__device__ __inline__ U32   add_b0					(U32 a, U32 b)			{ U32 v; asm("vadd.u32.u32.u32 %0, %1.b0, %2;" : "=r"(v) : "r"(a), "r"(b)); return v; }
-__device__ __inline__ U32   add_b1					(U32 a, U32 b)			{ U32 v; asm("vadd.u32.u32.u32 %0, %1.b1, %2;" : "=r"(v) : "r"(a), "r"(b)); return v; }
-__device__ __inline__ U32   add_b2					(U32 a, U32 b)			{ U32 v; asm("vadd.u32.u32.u32 %0, %1.b2, %2;" : "=r"(v) : "r"(a), "r"(b)); return v; }
-__device__ __inline__ U32   add_b3					(U32 a, U32 b)			{ U32 v; asm("vadd.u32.u32.u32 %0, %1.b3, %2;" : "=r"(v) : "r"(a), "r"(b)); return v; }
-__device__ __inline__ U32   vmad_b0					(U32 a, U32 b, U32 c)	{ U32 v; asm("vmad.u32.u32.u32 %0, %1.b0, %2, %3;" : "=r"(v) : "r"(a), "r"(b), "r"(c)); return v; }
-__device__ __inline__ U32   vmad_b1					(U32 a, U32 b, U32 c)	{ U32 v; asm("vmad.u32.u32.u32 %0, %1.b1, %2, %3;" : "=r"(v) : "r"(a), "r"(b), "r"(c)); return v; }
-__device__ __inline__ U32   vmad_b2					(U32 a, U32 b, U32 c)	{ U32 v; asm("vmad.u32.u32.u32 %0, %1.b2, %2, %3;" : "=r"(v) : "r"(a), "r"(b), "r"(c)); return v; }
-__device__ __inline__ U32   vmad_b3					(U32 a, U32 b, U32 c)	{ U32 v; asm("vmad.u32.u32.u32 %0, %1.b3, %2, %3;" : "=r"(v) : "r"(a), "r"(b), "r"(c)); return v; }
-__device__ __inline__ U32   vmad_b0_b3				(U32 a, U32 b, U32 c)	{ U32 v; asm("vmad.u32.u32.u32 %0, %1.b0, %2.b3, %3;" : "=r"(v) : "r"(a), "r"(b), "r"(c)); return v; }
-__device__ __inline__ U32   vmad_b1_b3				(U32 a, U32 b, U32 c)	{ U32 v; asm("vmad.u32.u32.u32 %0, %1.b1, %2.b3, %3;" : "=r"(v) : "r"(a), "r"(b), "r"(c)); return v; }
-__device__ __inline__ U32   vmad_b2_b3				(U32 a, U32 b, U32 c)	{ U32 v; asm("vmad.u32.u32.u32 %0, %1.b2, %2.b3, %3;" : "=r"(v) : "r"(a), "r"(b), "r"(c)); return v; }
-__device__ __inline__ U32   vmad_b3_b3				(U32 a, U32 b, U32 c)	{ U32 v; asm("vmad.u32.u32.u32 %0, %1.b3, %2.b3, %3;" : "=r"(v) : "r"(a), "r"(b), "r"(c)); return v; }
-__device__ __inline__ U32   add_mask8				(U32 a, U32 b)			{ U32 v; U32 z=0; asm("vadd.u32.u32.u32 %0.b0, %1, %2, %3;" : "=r"(v) : "r"(a), "r"(b), "r"(z)); return v; }
-__device__ __inline__ U32   sub_mask8				(U32 a, U32 b)			{ U32 v; U32 z=0; asm("vsub.u32.u32.u32 %0.b0, %1, %2, %3;" : "=r"(v) : "r"(a), "r"(b), "r"(z)); return v; }
-__device__ __inline__ S32   max_max					(S32 a, S32 b, S32 c)	{ S32 v; asm("vmax.s32.s32.s32.max %0, %1, %2, %3;" : "=r"(v) : "r"(a), "r"(b), "r"(c)); return v; }
-__device__ __inline__ S32   min_min					(S32 a, S32 b, S32 c)	{ S32 v; asm("vmin.s32.s32.s32.min %0, %1, %2, %3;" : "=r"(v) : "r"(a), "r"(b), "r"(c)); return v; }
-__device__ __inline__ S32   max_add					(S32 a, S32 b, S32 c)	{ S32 v; asm("vmax.s32.s32.s32.add %0, %1, %2, %3;" : "=r"(v) : "r"(a), "r"(b), "r"(c)); return v; }
-__device__ __inline__ S32   min_add					(S32 a, S32 b, S32 c)	{ S32 v; asm("vmin.s32.s32.s32.add %0, %1, %2, %3;" : "=r"(v) : "r"(a), "r"(b), "r"(c)); return v; }
-__device__ __inline__ U32   add_add					(U32 a, U32 b, U32 c)	{ U32 v; asm("vadd.u32.u32.u32.add %0, %1, %2, %3;" : "=r"(v) : "r"(a), "r"(b), "r"(c)); return v; }
-__device__ __inline__ U32   sub_add					(U32 a, U32 b, U32 c)	{ U32 v; asm("vsub.u32.u32.u32.add %0, %1, %2, %3;" : "=r"(v) : "r"(a), "r"(b), "r"(c)); return v; }
-__device__ __inline__ U32   add_sub					(U32 a, U32 b, U32 c)	{ U32 v; asm("vsub.u32.u32.u32.add %0, %1, %2, %3;" : "=r"(v) : "r"(a), "r"(c), "r"(b)); return v; }
-__device__ __inline__ S32   add_clamp_0_x			(S32 a, S32 b, S32 c)	{ S32 v; asm("vadd.u32.s32.s32.sat.min %0, %1, %2, %3;" : "=r"(v) : "r"(a), "r"(b), "r"(c)); return v; }
-__device__ __inline__ S32   add_clamp_b0			(S32 a, S32 b, S32 c)	{ S32 v; asm("vadd.u32.s32.s32.sat %0.b0, %1, %2, %3;" : "=r"(v) : "r"(a), "r"(b), "r"(c)); return v; }
-__device__ __inline__ S32   add_clamp_b2			(S32 a, S32 b, S32 c)	{ S32 v; asm("vadd.u32.s32.s32.sat %0.b2, %1, %2, %3;" : "=r"(v) : "r"(a), "r"(b), "r"(c)); return v; }
-__device__ __inline__ U32   prmt					(U32 a, U32 b, U32 c)   { U32 v; asm("prmt.b32 %0, %1, %2, %3;" : "=r"(v) : "r"(a), "r"(b), "r"(c)); return v; }
-__device__ __inline__ S32   u32lo_sext              (U32 a)                 { U32 v; asm("cvt.s16.u32 %0, %1;" : "=r"(v) : "r"(a)); return v; }
-__device__ __inline__ U32   slct                    (U32 a, U32 b, S32 c)   { U32 v; asm("slct.u32.s32 %0, %1, %2, %3;" : "=r"(v) : "r"(a), "r"(b), "r"(c)); return v; }
-__device__ __inline__ S32   slct                    (S32 a, S32 b, S32 c)   { S32 v; asm("slct.s32.s32 %0, %1, %2, %3;" : "=r"(v) : "r"(a), "r"(b), "r"(c)); return v; }
-__device__ __inline__ F32   slct                    (F32 a, F32 b, S32 c)   { F32 v; asm("slct.f32.s32 %0, %1, %2, %3;" : "=f"(v) : "f"(a), "f"(b), "r"(c)); return v; }
-__device__ __inline__ U32   isetge                  (S32 a, S32 b)          { U32 v; asm("set.ge.u32.s32 %0, %1, %2;" : "=r"(v) : "r"(a), "r"(b)); return v; }
-__device__ __inline__ F64   rcp_approx              (F64 a)                 { F64 v; asm("rcp.approx.ftz.f64 %0, %1;" : "=d"(v) : "d"(a)); return v; }
-__device__ __inline__ F32   fma_rm                  (F32 a, F32 b, F32 c)   { F32 v; asm("fma.rm.f32 %0, %1, %2, %3;" : "=f"(v) : "f"(a), "f"(b), "f"(c)); return v; }
+__device__ __inline__ F32   roundNearest            (F32 a)                 { return (a >= 0.0f) ? floorf(a + 0.5f) : ceilf(a - 0.5f); }
+__device__ __inline__ S32   f32_to_s32_sat          (F32 a)                 { if (!(a == a)) return 0; if ((F64)a >= 2147483647.0) return CR_S32_MAX; if ((F64)a <= -2147483648.0) return CR_S32_MIN; return (S32)roundNearest(a); }
+__device__ __inline__ U32   f32_to_u32_sat          (F32 a)                 { if (!(a == a) || a <= 0.0f) return 0u; if ((F64)a >= 4294967295.0) return CR_U32_MAX; return (U32)roundNearest(a); }
+__device__ __inline__ U32   f32_to_u32_sat_rmi      (F32 a)                 { if (!(a == a) || a <= 0.0f) return 0u; if ((F64)a >= 4294967295.0) return CR_U32_MAX; return (U32)floorf(a); }
+__device__ __inline__ U32   f32_to_u8_sat           (F32 a)                 { if (!(a == a) || a <= 0.0f) return 0u; if (a >= 255.0f) return 255u; return (U32)roundNearest(a); }
+__device__ __inline__ S64   f32_to_s64              (F32 a)                 { return (S64)roundNearest(a); }
+__device__ __inline__ S32   s16lo                   (S32 a)                 { return (S32)(S16)((U32)a & 0xffffu); }
+__device__ __inline__ S32   s16hi                   (S32 a)                 { return (S32)(S16)((U32)a >> 16); }
+__device__ __inline__ S32   u16lo                   (U32 a)                 { return (S32)(U16)(a & 0xffffu); }
+__device__ __inline__ S32   u16hi                   (U32 a)                 { return (S32)(U16)(a >> 16); }
+__device__ __inline__ U32   byteN                   (U32 a, U32 n)          { return (a >> (n * 8u)) & 0xffu; }
+__device__ __inline__ S32   add_s16lo_s16lo         (S32 a, S32 b)          { return s16lo(a) + s16lo(b); }
+__device__ __inline__ S32   add_s16hi_s16lo         (S32 a, S32 b)          { return s16hi(a) + s16lo(b); }
+__device__ __inline__ S32   add_s16lo_s16hi         (S32 a, S32 b)          { return s16lo(a) + s16hi(b); }
+__device__ __inline__ S32   add_s16hi_s16hi         (S32 a, S32 b)          { return s16hi(a) + s16hi(b); }
+__device__ __inline__ S32   sub_s16lo_s16lo         (S32 a, S32 b)          { return s16lo(a) - s16lo(b); }
+__device__ __inline__ S32   sub_s16hi_s16lo         (S32 a, S32 b)          { return s16hi(a) - s16lo(b); }
+__device__ __inline__ S32   sub_s16lo_s16hi         (S32 a, S32 b)          { return s16lo(a) - s16hi(b); }
+__device__ __inline__ S32   sub_s16hi_s16hi         (S32 a, S32 b)          { return s16hi(a) - s16hi(b); }
+__device__ __inline__ S32   sub_u16lo_u16lo         (U32 a, U32 b)          { return u16lo(a) - u16lo(b); }
+__device__ __inline__ S32   sub_u16hi_u16lo         (U32 a, U32 b)          { return u16hi(a) - u16lo(b); }
+__device__ __inline__ S32   sub_u16lo_u16hi         (U32 a, U32 b)          { return u16lo(a) - u16hi(b); }
+__device__ __inline__ S32   sub_u16hi_u16hi         (U32 a, U32 b)          { return u16hi(a) - u16hi(b); }
+__device__ __inline__ U32   add_b0                  (U32 a, U32 b)          { return byteN(a, 0u) + b; }
+__device__ __inline__ U32   add_b1                  (U32 a, U32 b)          { return byteN(a, 1u) + b; }
+__device__ __inline__ U32   add_b2                  (U32 a, U32 b)          { return byteN(a, 2u) + b; }
+__device__ __inline__ U32   add_b3                  (U32 a, U32 b)          { return byteN(a, 3u) + b; }
+__device__ __inline__ U32   vmad_b0                 (U32 a, U32 b, U32 c)   { return byteN(a, 0u) * b + c; }
+__device__ __inline__ U32   vmad_b1                 (U32 a, U32 b, U32 c)   { return byteN(a, 1u) * b + c; }
+__device__ __inline__ U32   vmad_b2                 (U32 a, U32 b, U32 c)   { return byteN(a, 2u) * b + c; }
+__device__ __inline__ U32   vmad_b3                 (U32 a, U32 b, U32 c)   { return byteN(a, 3u) * b + c; }
+__device__ __inline__ U32   vmad_b0_b3              (U32 a, U32 b, U32 c)   { return byteN(a, 0u) * byteN(b, 3u) + c; }
+__device__ __inline__ U32   vmad_b1_b3              (U32 a, U32 b, U32 c)   { return byteN(a, 1u) * byteN(b, 3u) + c; }
+__device__ __inline__ U32   vmad_b2_b3              (U32 a, U32 b, U32 c)   { return byteN(a, 2u) * byteN(b, 3u) + c; }
+__device__ __inline__ U32   vmad_b3_b3              (U32 a, U32 b, U32 c)   { return byteN(a, 3u) * byteN(b, 3u) + c; }
+__device__ __inline__ U32   add_mask8               (U32 a, U32 b)          { return (a + b) & 0xffu; }
+__device__ __inline__ U32   sub_mask8               (U32 a, U32 b)          { return (a - b) & 0xffu; }
+__device__ __inline__ S32   max_max                 (S32 a, S32 b, S32 c)   { return ::max(::max(a, b), c); }
+__device__ __inline__ S32   min_min                 (S32 a, S32 b, S32 c)   { return ::min(::min(a, b), c); }
+__device__ __inline__ S32   max_add                 (S32 a, S32 b, S32 c)   { return ::max(a, b) + c; }
+__device__ __inline__ S32   min_add                 (S32 a, S32 b, S32 c)   { return ::min(a, b) + c; }
+__device__ __inline__ U32   add_add                 (U32 a, U32 b, U32 c)   { return a + b + c; }
+__device__ __inline__ U32   sub_add                 (U32 a, U32 b, U32 c)   { return a - b + c; }
+__device__ __inline__ U32   add_sub                 (U32 a, U32 b, U32 c)   { return a + b - c; }
+__device__ __inline__ S32   add_clamp_0_x           (S32 a, S32 b, S32 c)   { S32 v = a + b; return ::min(::max(v, 0), c); }
+__device__ __inline__ S32   add_clamp_b0            (S32 a, S32 b, S32 c)   { return add_clamp_0_x(a, b, c); }
+__device__ __inline__ S32   add_clamp_b2            (S32 a, S32 b, S32 c)   { return add_clamp_0_x(a, b, c); }
+__device__ __inline__ U32   prmt                    (U32 a, U32 b, U32 c)   { U64 src = ((U64)b << 32) | a; U32 v = 0; for (int i = 0; i < 4; i++) { U32 sel = (c >> (i * 4)) & 0xfu; U32 byte = (sel < 8u) ? (U32)((src >> (sel * 8u)) & 0xffu) : 0u; v |= byte << (i * 8); } return v; }
+__device__ __inline__ S32   u32lo_sext              (U32 a)                 { return (S32)(S16)(a & 0xffffu); }
+__device__ __inline__ U32   slct                    (U32 a, U32 b, S32 c)   { return (c >= 0) ? a : b; }
+__device__ __inline__ S32   slct                    (S32 a, S32 b, S32 c)   { return (c >= 0) ? a : b; }
+__device__ __inline__ F32   slct                    (F32 a, F32 b, S32 c)   { return (c >= 0) ? a : b; }
+__device__ __inline__ U32   isetge                  (S32 a, S32 b)          { return (a >= b) ? 1u : 0u; }
+__device__ __inline__ F64   rcp_approx              (F64 a)                 { return 1.0 / a; }
+__device__ __inline__ F32   fma_rm                  (F32 a, F32 b, F32 c)   { return fmaf(a, b, c); }
 __device__ __inline__ U32   idiv_fast               (U32 a, U32 b);
 
 __device__ __inline__ uint3 setupPleq               (float3 values, int2 v0, int2 d1, int2 d2, F32 areaRcp);

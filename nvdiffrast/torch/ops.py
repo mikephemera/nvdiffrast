@@ -8,8 +8,23 @@
 
 import numpy as np
 import torch
+import torch_musa
 import warnings
 import _nvdiffrast_c
+
+_FORWARD_ONLY_ERROR = "nvdiffrast_musa supports forward inference only"
+
+def _normalize_musa_device(device):
+    if device is None:
+        return None
+    if isinstance(device, str):
+        if device == 'cuda':
+            return 'musa'
+        if device.startswith('cuda:'):
+            return 'musa:' + device.split(':', 1)[1]
+    if isinstance(device, torch.device) and device.type == 'cuda':
+        return torch.device('musa' if device.index is None else f'musa:{device.index}')
+    return device
 
 #----------------------------------------------------------------------------
 # Log level.
@@ -46,26 +61,29 @@ def set_log_level(level):
 
 class RasterizeCudaContext:
     def __init__(self, device=None):
-        '''Create a new Cuda rasterizer context.
+        '''Create a new MUSA rasterizer context.
 
         The context is deleted and internal storage is released when the object is
         destroyed.
 
         Args:
-          device (Optional): Cuda device on which the context is created. Type can be
-                             `torch.device`, string (e.g., `'cuda:1'`), or int. If not
-                             specified, context will be created on currently active Cuda
-                             device.
+          device (Optional): MUSA device on which the context is created. Type can be
+                             `torch.device`, string (e.g., `'musa:1'` or legacy
+                             `'cuda:1'`), or int. If not specified, context will be
+                             created on currently active MUSA device.
         Returns:
-          The newly created Cuda rasterizer context.
+          The newly created MUSA rasterizer context.
         '''
+        device = _normalize_musa_device(device)
         if device is None:
-            cuda_device_idx = torch.cuda.current_device()
+            musa_device_idx = torch.musa.current_device()
         else:
-            with torch.cuda.device(device):
-                cuda_device_idx = torch.cuda.current_device()
-        self.cpp_wrapper = _nvdiffrast_c.RasterizeCRStateWrapper(cuda_device_idx)
+            with torch.musa.device(device):
+                musa_device_idx = torch.musa.current_device()
+        self.cpp_wrapper = _nvdiffrast_c.RasterizeCRStateWrapper(musa_device_idx)
         self.active_depth_peeler = None
+
+RasterizeMusaContext = RasterizeCudaContext
 
 
 #----------------------------------------------------------------------------
@@ -82,12 +100,7 @@ class _rasterize_func(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, dy, ddb):
-        pos, tri, out = ctx.saved_tensors
-        if ctx.saved_grad_db:
-            g_pos = _nvdiffrast_c.rasterize_grad_db(pos, tri, out, dy, ddb)
-        else:
-            g_pos = _nvdiffrast_c.rasterize_grad(pos, tri, out, dy)
-        return None, g_pos, None, None, None, None, None
+        raise RuntimeError(_FORWARD_ONLY_ERROR)
 
 # Op wrapper.
 def rasterize(glctx, pos, tri, resolution, ranges=None, grad_db=True):
@@ -129,7 +142,7 @@ def rasterize(glctx, pos, tri, resolution, ranges=None, grad_db=True):
 
     # Check that context is not currently reserved for depth peeling.
     if glctx.active_depth_peeler is not None:
-        return RuntimeError("Cannot call rasterize() during depth peeling operation, use rasterize_next_layer() instead")
+        raise RuntimeError("Cannot call rasterize() during depth peeling operation, use rasterize_next_layer() instead")
 
     # Instantiate the function.
     return _rasterize_func.apply(glctx, pos, tri, resolution, ranges, grad_db, -1)
@@ -147,6 +160,7 @@ class DepthPeeler:
         Returns:
           The newly created depth peeler.
         '''
+        raise NotImplementedError("nvdiffrast_musa does not support depth peeling")
         assert isinstance(glctx, RasterizeCudaContext)
         assert grad_db is True or grad_db is False
 
@@ -218,10 +232,7 @@ class _interpolate_func_da(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, dy, dda):
-        attr, rast, tri, rast_db = ctx.saved_tensors
-        diff_attrs_all, diff_attrs_list = ctx.saved_misc
-        g_attr, g_rast, g_rast_db = _nvdiffrast_c.interpolate_grad_da(attr, rast, tri, dy, rast_db, dda, diff_attrs_all, diff_attrs_list)
-        return g_attr, g_rast, None, g_rast_db, None, None
+        raise RuntimeError(_FORWARD_ONLY_ERROR)
 
 # No pixel differential for any attribute.
 class _interpolate_func(torch.autograd.Function):
@@ -233,9 +244,7 @@ class _interpolate_func(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, dy, _):
-        attr, rast, tri = ctx.saved_tensors
-        g_attr, g_rast = _nvdiffrast_c.interpolate_grad(attr, rast, tri, dy)
-        return g_attr, g_rast, None
+        raise RuntimeError(_FORWARD_ONLY_ERROR)
 
 # Op wrapper.
 def interpolate(attr, rast, tri, rast_db=None, diff_attrs=None):
@@ -298,28 +307,11 @@ def interpolate(attr, rast, tri, rast_db=None, diff_attrs=None):
 class _texture_func_mip(torch.autograd.Function):
     @staticmethod
     def forward(ctx, filter_mode, tex, uv, uv_da, mip_level_bias, mip_wrapper, filter_mode_enum, boundary_mode_enum, *mip_stack):
-        empty = torch.tensor([])
-        if uv_da is None:
-            uv_da = empty
-        if mip_level_bias is None:
-            mip_level_bias = empty
-        if mip_wrapper is None:
-            mip_wrapper = _nvdiffrast_c.TextureMipWrapper()
-        out = _nvdiffrast_c.texture_fwd_mip(tex, uv, uv_da, mip_level_bias, mip_wrapper, mip_stack, filter_mode_enum, boundary_mode_enum)
-        ctx.save_for_backward(tex, uv, uv_da, mip_level_bias, *mip_stack)
-        ctx.saved_misc = filter_mode, mip_wrapper, filter_mode_enum, boundary_mode_enum
-        return out
+        raise NotImplementedError("nvdiffrast_musa does not support mipmapped texture sampling")
 
     @staticmethod
     def backward(ctx, dy):
-        tex, uv, uv_da, mip_level_bias, *mip_stack = ctx.saved_tensors
-        filter_mode, mip_wrapper, filter_mode_enum, boundary_mode_enum = ctx.saved_misc
-        if filter_mode == 'linear-mipmap-linear':
-            g_tex, g_uv, g_uv_da, g_mip_level_bias, g_mip_stack = _nvdiffrast_c.texture_grad_linear_mipmap_linear(tex, uv, dy, uv_da, mip_level_bias, mip_wrapper, mip_stack, filter_mode_enum, boundary_mode_enum)
-            return (None, g_tex, g_uv, g_uv_da, g_mip_level_bias, None, None, None) + tuple(g_mip_stack)
-        else: # linear-mipmap-nearest
-            g_tex, g_uv, g_mip_stack = _nvdiffrast_c.texture_grad_linear_mipmap_nearest(tex, uv, dy, uv_da, mip_level_bias, mip_wrapper, mip_stack, filter_mode_enum, boundary_mode_enum)
-            return (None, g_tex, g_uv, None, None, None, None, None) + tuple(g_mip_stack)
+        raise RuntimeError(_FORWARD_ONLY_ERROR)
 
 # Linear and nearest: Mipmaps disabled.
 class _texture_func(torch.autograd.Function):
@@ -332,14 +324,7 @@ class _texture_func(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, dy):
-        tex, uv = ctx.saved_tensors
-        filter_mode, filter_mode_enum, boundary_mode_enum = ctx.saved_misc
-        if filter_mode == 'linear':
-            g_tex, g_uv = _nvdiffrast_c.texture_grad_linear(tex, uv, dy, filter_mode_enum, boundary_mode_enum)
-            return None, g_tex, g_uv, None, None
-        else: # nearest
-            g_tex = _nvdiffrast_c.texture_grad_nearest(tex, uv, dy, filter_mode_enum, boundary_mode_enum)
-            return None, g_tex, None, None, None
+        raise RuntimeError(_FORWARD_ONLY_ERROR)
 
 # Op wrapper.
 def texture(tex, uv, uv_da=None, mip_level_bias=None, mip=None, filter_mode='auto', boundary_mode='wrap', max_mip_level=None):
@@ -391,25 +376,26 @@ def texture(tex, uv, uv_da=None, mip_level_bias=None, mip=None, filter_mode='aut
         (e.g., zero vectors) output all zeros and do not propagate gradients.
     """
 
+    if uv_da is not None or mip_level_bias is not None or mip is not None:
+        raise NotImplementedError("nvdiffrast_musa does not support mipmapped texture sampling")
+
     # Default filter mode.
     if filter_mode == 'auto':
-        filter_mode = 'linear-mipmap-linear' if (uv_da is not None or mip_level_bias is not None) else 'linear'
+        filter_mode = 'linear'
+    if filter_mode not in ['nearest', 'linear']:
+        raise NotImplementedError("nvdiffrast_musa texture() supports only nearest, linear, and non-mipmap auto filter modes")
 
     # Sanitize inputs.
-    if max_mip_level is None:
-        max_mip_level = -1
-    else:
+    if max_mip_level is not None:
         max_mip_level = int(max_mip_level)
         assert max_mip_level >= 0
+        if max_mip_level != 0:
+            raise NotImplementedError("nvdiffrast_musa does not support mipmapped texture sampling")
 
     # Check inputs.
     assert isinstance(tex, torch.Tensor) and isinstance(uv, torch.Tensor)
     if 'mipmap' in filter_mode:
-        assert isinstance(uv_da, torch.Tensor) or isinstance(mip_level_bias, torch.Tensor)
-
-    # If mipping disabled via max level=0, we may as well use simpler filtering internally.
-    if max_mip_level == 0 and filter_mode in ['linear-mipmap-nearest', 'linear-mipmap-linear']:
-        filter_mode = 'linear'
+        raise NotImplementedError("nvdiffrast_musa does not support mipmapped texture sampling")
 
     # Convert filter mode to internal enumeration.
     filter_mode_dict = {'nearest': 0, 'linear': 1, 'linear-mipmap-nearest': 2, 'linear-mipmap-linear': 3}
@@ -419,24 +405,8 @@ def texture(tex, uv, uv_da=None, mip_level_bias=None, mip=None, filter_mode='aut
     boundary_mode_dict = {'cube': 0, 'wrap': 1, 'clamp': 2, 'zero': 3}
     boundary_mode_enum = boundary_mode_dict[boundary_mode]
 
-    # Construct a mipmap if necessary.
-    if 'mipmap' in filter_mode:
-        mip_wrapper, mip_stack = None, []
-        if mip is not None:
-            assert isinstance(mip, (_nvdiffrast_c.TextureMipWrapper, list))
-            if isinstance(mip, list):
-                assert all(isinstance(x, torch.Tensor) for x in mip)
-                mip_stack = mip
-            else:
-                mip_wrapper = mip
-        else:
-            mip_wrapper = _nvdiffrast_c.texture_construct_mip(tex, max_mip_level, boundary_mode == 'cube')
-
     # Choose stub.
-    if filter_mode == 'linear-mipmap-linear' or filter_mode == 'linear-mipmap-nearest':
-        return _texture_func_mip.apply(filter_mode, tex, uv, uv_da, mip_level_bias, mip_wrapper, filter_mode_enum, boundary_mode_enum, *mip_stack)
-    else:
-        return _texture_func.apply(filter_mode, tex, uv, filter_mode_enum, boundary_mode_enum)
+    return _texture_func.apply(filter_mode, tex, uv, filter_mode_enum, boundary_mode_enum)
 
 # Mipmap precalculation for cases where the texture stays constant.
 def texture_construct_mip(tex, max_mip_level=None, cube_mode=False):
@@ -455,14 +425,7 @@ def texture_construct_mip(tex, max_mip_level=None, cube_mode=False):
         in the `mip` argument.
     """
 
-    assert isinstance(tex, torch.Tensor)
-    assert cube_mode is True or cube_mode is False
-    if max_mip_level is None:
-        max_mip_level = -1
-    else:
-        max_mip_level = int(max_mip_level)
-        assert max_mip_level >= 0
-    return _nvdiffrast_c.texture_construct_mip(tex, max_mip_level, cube_mode)
+    raise NotImplementedError("nvdiffrast_musa does not support mipmap construction")
 
 #----------------------------------------------------------------------------
 # Antialias.
@@ -471,19 +434,11 @@ def texture_construct_mip(tex, max_mip_level=None, cube_mode=False):
 class _antialias_func(torch.autograd.Function):
     @staticmethod
     def forward(ctx, color, rast, pos, tri, topology_hash, pos_gradient_boost):
-        out, work_buffer = _nvdiffrast_c.antialias_fwd(color, rast, pos, tri, topology_hash)
-        ctx.save_for_backward(color, rast, pos, tri)
-        ctx.saved_misc = pos_gradient_boost, work_buffer
-        return out
+        raise NotImplementedError("nvdiffrast_musa does not support antialias")
 
     @staticmethod
     def backward(ctx, dy):
-        color, rast, pos, tri = ctx.saved_tensors
-        pos_gradient_boost, work_buffer = ctx.saved_misc
-        g_color, g_pos = _nvdiffrast_c.antialias_grad(color, rast, pos, tri, dy, work_buffer)
-        if pos_gradient_boost != 1.0:
-            g_pos = g_pos * pos_gradient_boost
-        return g_color, None, g_pos, None, None, None
+        raise RuntimeError(_FORWARD_ONLY_ERROR)
 
 # Op wrapper.
 def antialias(color, rast, pos, tri, topology_hash=None, pos_gradient_boost=1.0):
@@ -513,17 +468,7 @@ def antialias(color, rast, pos, tri, topology_hash=None, pos_gradient_boost=1.0)
         A tensor containing the antialiased image with the same shape as `color` input tensor.
     """
 
-    # Check inputs.
-    assert all(isinstance(x, torch.Tensor) for x in (color, rast, pos, tri))
-
-    # Construct topology hash unless provided by user.
-    if topology_hash is not None:
-        assert isinstance(topology_hash, _nvdiffrast_c.TopologyHashWrapper)
-    else:
-        topology_hash = _nvdiffrast_c.antialias_construct_topology_hash(tri)
-
-    # Instantiate the function.
-    return _antialias_func.apply(color, rast, pos, tri, topology_hash, pos_gradient_boost)
+    raise NotImplementedError("nvdiffrast_musa does not support antialias")
 
 # Topology hash precalculation for cases where the triangle array stays constant.
 def antialias_construct_topology_hash(tri):
@@ -540,8 +485,7 @@ def antialias_construct_topology_hash(tri):
         An opaque object containing the topology hash. This can be supplied in a call to 
         `antialias()` in the `topology_hash` argument.
     """
-    assert isinstance(tri, torch.Tensor)
-    return _nvdiffrast_c.antialias_construct_topology_hash(tri)
+    raise NotImplementedError("nvdiffrast_musa does not support antialias")
 
 #----------------------------------------------------------------------------
 # Legacy OpenGL context stub for backwards compatibility.

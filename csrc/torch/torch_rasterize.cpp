@@ -17,23 +17,29 @@
 //------------------------------------------------------------------------
 // Kernel prototypes.
 
-void RasterizeCudaFwdShaderKernel(const RasterizeCudaFwdShaderParams p);
-void RasterizeGradKernel(const RasterizeGradParams p);
-void RasterizeGradKernelDb(const RasterizeGradParams p);
+#define NVDR_DECLARE_MUSA_KERNEL(name, params_type) \
+    void __device_stub__##name(const params_type p); \
+    static constexpr auto name = __device_stub__##name
+
+NVDR_DECLARE_MUSA_KERNEL(RasterizeCudaFwdShaderKernel, RasterizeCudaFwdShaderParams);
+NVDR_DECLARE_MUSA_KERNEL(RasterizeGradKernel, RasterizeGradParams);
+NVDR_DECLARE_MUSA_KERNEL(RasterizeGradKernelDb, RasterizeGradParams);
+
+#undef NVDR_DECLARE_MUSA_KERNEL
 
 //------------------------------------------------------------------------
 // Python CudaRaster state wrapper methods.
 
-RasterizeCRStateWrapper::RasterizeCRStateWrapper(int cudaDeviceIdx_)
+RasterizeCRStateWrapper::RasterizeCRStateWrapper(int musaDeviceIdx_)
 {
-    const at::cuda::OptionalCUDAGuard device_guard(cudaDeviceIdx_);
-    cudaDeviceIdx = cudaDeviceIdx_;
+    const c10::musa::OptionalMUSAGuard device_guard(c10::Device(c10::DeviceType::PrivateUse1, musaDeviceIdx_));
+    musaDeviceIdx = musaDeviceIdx_;
     cr = new CR::CudaRaster();
 }
 
 RasterizeCRStateWrapper::~RasterizeCRStateWrapper(void)
 {
-    const at::cuda::OptionalCUDAGuard device_guard(cudaDeviceIdx);
+    const c10::musa::OptionalMUSAGuard device_guard(c10::Device(c10::DeviceType::PrivateUse1, musaDeviceIdx));
     delete cr;
 }
 
@@ -42,8 +48,8 @@ RasterizeCRStateWrapper::~RasterizeCRStateWrapper(void)
 
 std::tuple<torch::Tensor, torch::Tensor> rasterize_fwd_cuda(RasterizeCRStateWrapper& stateWrapper, torch::Tensor pos, torch::Tensor tri, std::tuple<int, int> resolution, torch::Tensor ranges, int peeling_idx)
 {
-    const at::cuda::OptionalCUDAGuard device_guard(device_of(pos));
-    cudaStream_t stream = at::cuda::getCurrentCUDAStream();
+    const c10::musa::OptionalMUSAGuard device_guard(device_of(pos));
+    musaStream_t stream = c10::musa::getCurrentMUSAStream();
     CR::CudaRaster* cr = stateWrapper.cr;
 
     // Check inputs.
@@ -54,7 +60,7 @@ std::tuple<torch::Tensor, torch::Tensor> rasterize_fwd_cuda(RasterizeCRStateWrap
     NVDR_CHECK_I32(tri, ranges);
 
     // Check that CudaRaster context was created for the correct GPU.
-    NVDR_CHECK(pos.get_device() == stateWrapper.cudaDeviceIdx, "CudaRaster context must must reside on the same device as input tensors");
+    NVDR_CHECK(pos.get_device() == stateWrapper.musaDeviceIdx, "CudaRaster context must must reside on the same device as input tensors");
 
     // Determine instance mode and check input dimensions.
     bool instance_mode = pos.sizes().size() > 2;
@@ -124,7 +130,7 @@ std::tuple<torch::Tensor, torch::Tensor> rasterize_fwd_cuda(RasterizeCRStateWrap
     }
 
     // Allocate output tensors.
-    torch::TensorOptions opts = torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA);
+    torch::TensorOptions opts = torch::TensorOptions().dtype(torch::kFloat32).device(c10::Device(c10::DeviceType::PrivateUse1, pos.get_device()));
     torch::Tensor out = torch::empty({depth, height_out, width_out, 4}, opts);
     torch::Tensor out_db = torch::empty({depth, height_out, width_out, 4}, opts);
 
@@ -159,7 +165,7 @@ std::tuple<torch::Tensor, torch::Tensor> rasterize_fwd_cuda(RasterizeCRStateWrap
 
     // Launch CUDA kernel.
     void* args[] = {&p};
-    NVDR_CHECK_CUDA_ERROR(cudaLaunchKernel((void*)RasterizeCudaFwdShaderKernel, gridSize, blockSize, args, 0, stream));
+    NVDR_CHECK_MUSA_ERROR(musaLaunchKernel((void*)RasterizeCudaFwdShaderKernel, gridSize, blockSize, args, 0, stream));
 
     // Return.
     return std::tuple<torch::Tensor, torch::Tensor>(out, out_db);
@@ -170,8 +176,8 @@ std::tuple<torch::Tensor, torch::Tensor> rasterize_fwd_cuda(RasterizeCRStateWrap
 
 torch::Tensor rasterize_grad_db(torch::Tensor pos, torch::Tensor tri, torch::Tensor out, torch::Tensor dy, torch::Tensor ddb)
 {
-    const at::cuda::OptionalCUDAGuard device_guard(device_of(pos));
-    cudaStream_t stream = at::cuda::getCurrentCUDAStream();
+    const c10::musa::OptionalMUSAGuard device_guard(device_of(pos));
+    musaStream_t stream = c10::musa::getCurrentMUSAStream();
     RasterizeGradParams p;
     bool enable_db = ddb.defined();
 
@@ -249,7 +255,7 @@ torch::Tensor rasterize_grad_db(torch::Tensor pos, torch::Tensor tri, torch::Ten
     // Launch CUDA kernel.
     void* args[] = {&p};
     void* func = enable_db ? (void*)RasterizeGradKernelDb : (void*)RasterizeGradKernel;
-    NVDR_CHECK_CUDA_ERROR(cudaLaunchKernel(func, gridSize, blockSize, args, 0, stream));
+    NVDR_CHECK_MUSA_ERROR(musaLaunchKernel(func, gridSize, blockSize, args, 0, stream));
 
     // Return the gradients.
     return grad;

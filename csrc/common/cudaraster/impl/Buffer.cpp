@@ -25,7 +25,7 @@ Buffer::Buffer(void)
 Buffer::~Buffer(void)
 {
     if (m_gpuPtr)
-        cudaFree(m_gpuPtr); // Don't throw an exception.
+        musaFree(m_gpuPtr); // Don't throw an exception.
 }
 
 void Buffer::reset(size_t bytes)
@@ -35,12 +35,12 @@ void Buffer::reset(size_t bytes)
 
     if (m_gpuPtr)
     {
-        NVDR_CHECK_CUDA_ERROR(cudaFree(m_gpuPtr));
+        NVDR_CHECK_MUSA_ERROR(musaFree(m_gpuPtr));
         m_gpuPtr = NULL;
     }
 
     if (bytes > 0)
-        NVDR_CHECK_CUDA_ERROR(cudaMalloc(&m_gpuPtr, bytes));
+        NVDR_CHECK_MUSA_ERROR(musaMalloc(&m_gpuPtr, bytes));
 
     m_bytes = bytes;
 }
@@ -65,7 +65,7 @@ HostBuffer::HostBuffer(void)
 HostBuffer::~HostBuffer(void)
 {
     if (m_hostPtr)
-        cudaFreeHost(m_hostPtr); // Don't throw an exception.
+        musaFreeHost(m_hostPtr); // Don't throw an exception.
 }
 
 void HostBuffer::reset(size_t bytes)
@@ -75,12 +75,12 @@ void HostBuffer::reset(size_t bytes)
 
     if (m_hostPtr)
     {
-        NVDR_CHECK_CUDA_ERROR(cudaFreeHost(m_hostPtr));
+        NVDR_CHECK_MUSA_ERROR(musaFreeHost(m_hostPtr));
         m_hostPtr = NULL;
     }
 
     if (bytes > 0)
-        NVDR_CHECK_CUDA_ERROR(cudaMallocHost(&m_hostPtr, bytes));
+        NVDR_CHECK_MUSA_ERROR(musaMallocHost(&m_hostPtr, bytes));
 
     m_bytes = bytes;
 }

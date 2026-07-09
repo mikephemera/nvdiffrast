@@ -15,11 +15,11 @@ namespace CR { class CudaRaster; }
 class RasterizeCRStateWrapper
 {
 public:
-    RasterizeCRStateWrapper     (int cudaDeviceIdx);
+    RasterizeCRStateWrapper     (int musaDeviceIdx);
     ~RasterizeCRStateWrapper    (void);
 
     CR::CudaRaster*             cr;
-    int                         cudaDeviceIdx;
+    int                         musaDeviceIdx;
 };
 
 //------------------------------------------------------------------------
@@ -34,14 +34,5 @@ public:
     bool                        cube_mode;      // For error checking.
 };
 
-
-//------------------------------------------------------------------------
-// Antialias topology hash wrapper to prevent intrusion from Python side.
-
-class TopologyHashWrapper
-{
-public:
-    torch::Tensor               ev_hash;
-};
 
 //------------------------------------------------------------------------

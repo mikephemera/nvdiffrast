@@ -212,7 +212,7 @@ __device__ __inline__ void binRasterImpl(const CRParams p)
                 hiy = add_clamp_0_x((v0y + max_max(d01y, 0, d02y)) >> binLog, 0, p.heightBins - 1);
 
                 U32 bit = 1 << threadIdx.x;
-#if __CUDA_ARCH__ >= 700
+#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 700
                 bool multi = (hix != lox || hiy != loy);
                 if (!__any_sync(hasTriMask, multi))
                 {
